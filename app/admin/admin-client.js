@@ -15,6 +15,12 @@ const labels = {
 };
 const EMPTY_PRODUCT = { name: '', size: '', detail: '', price: 0, compareAt: 0, saving: 0, unit: '', image: '', popular: false, active: true, stock: 0, weight: 1000 };
 
+async function responseData(response, label) {
+  const text = await response.text();
+  if (!text) throw new Error(`${label} tidak mengirim respons. Silakan muat ulang.`);
+  try { return JSON.parse(text); } catch { throw new Error(`${label} mengirim respons yang tidak valid.`); }
+}
+
 export default function AdminClient() {
   const [auth, setAuth] = useState(null);
   const [tab, setTab] = useState('orders');
@@ -43,12 +49,21 @@ export default function AdminClient() {
       }
       sessionConfirmed = true;
       setAuth(true);
-      const [orderData, productData, faqData] = await Promise.all([orderResponse.json(), productResponse.json(), faqResponse.json()]);
+      const orderData = await responseData(orderResponse, 'API pesanan');
       if (!orderResponse.ok) throw new Error(orderData.error || 'Gagal memuat order');
-      if (!productResponse.ok) throw new Error(productData.error || 'Gagal memuat produk');
       setOrders(orderData.orders || []);
-      setProducts(productData.products || PRODUCTS);
-      setFaqs(faqData.faqs || []);
+      const warnings = [];
+      try {
+        const productData = await responseData(productResponse, 'API produk');
+        if (!productResponse.ok) throw new Error(productData.error || 'Gagal memuat produk');
+        setProducts(productData.products || PRODUCTS);
+      } catch (productError) { warnings.push(productError.message); }
+      try {
+        const faqData = await responseData(faqResponse, 'API FAQ');
+        if (!faqResponse.ok) throw new Error(faqData.error || 'Gagal memuat FAQ');
+        setFaqs(faqData.faqs || []);
+      } catch (faqError) { warnings.push(faqError.message); }
+      if (warnings.length) setError(`Pesanan berhasil dimuat. ${warnings.join(' ')}`);
     } catch (loadError) {
       setError(loadError.message || 'Gagal memuat data.');
       setAuth(sessionConfirmed ? true : false);
