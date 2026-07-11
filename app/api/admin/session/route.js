@@ -11,7 +11,7 @@ export async function POST(request) {
   const expectedHash = Buffer.from(digest(expected));
   if (!timingSafeEqual(inputHash, expectedHash)) return NextResponse.json({ error:'PIN tidak sesuai.' }, { status:401 });
   const response = NextResponse.json({ ok:true });
-  response.cookies.set('ruloxius_admin', digest(`ruloxius:${expected}`), { httpOnly:true, secure:process.env.NODE_ENV==='production', sameSite:'strict', path:'/', maxAge:60*60*8 });
+  response.cookies.set('ruloxius_admin', digest(`ruloxius:${expected}`), { httpOnly:true, secure:process.env.NODE_ENV==='production', sameSite:'strict', path:'/', maxAge:60*60*24 });
   return response;
 }
 

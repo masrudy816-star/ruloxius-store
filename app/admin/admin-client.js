@@ -93,6 +93,7 @@ export default function AdminClient() {
       body: JSON.stringify({ id: order.id, ...changes }),
     });
     const data = await response.json();
+    if (response.status === 401) { setError('Sesi admin berakhir. Silakan masukkan PIN kembali.'); setAuth(false); return false; }
     if (!response.ok) {
       setError(data.error || 'Gagal memperbarui order');
       return false;
@@ -111,6 +112,7 @@ export default function AdminClient() {
       body: JSON.stringify(product),
     });
     const data = await response.json();
+    if (response.status === 401) { setError('Sesi admin berakhir. Silakan masukkan PIN kembali.'); setAuth(false); return false; }
     if (!response.ok) {
       setError(data.error || 'Gagal menyimpan produk');
       return false;
@@ -127,6 +129,7 @@ export default function AdminClient() {
       body: JSON.stringify(product),
     });
     const data = await response.json();
+    if (response.status === 401) { setError('Sesi admin berakhir. Silakan masukkan PIN kembali.'); setAuth(false); return false; }
     if (!response.ok) {
       setError(data.error || 'Gagal menambahkan produk');
       return false;
@@ -139,6 +142,7 @@ export default function AdminClient() {
     if (!confirm(`Hapus ${product.name} ${product.size}? Produk yang pernah dipesan mungkin tidak dapat dihapus; nonaktifkan sebagai pilihan aman.`)) return false;
     const response = await fetch(`/api/products?id=${encodeURIComponent(product.id)}`, { method: 'DELETE' });
     const data = await response.json();
+    if (response.status === 401) { setError('Sesi admin berakhir. Silakan masukkan PIN kembali.'); setAuth(false); return false; }
     if (!response.ok) { setError(data.error || 'Gagal menghapus produk'); return false; }
     setProducts((current) => current.filter((item) => item.id !== product.id));
     return true;
@@ -147,6 +151,7 @@ export default function AdminClient() {
   async function saveFaq(faq, method = 'PUT') {
     const response = await fetch('/api/faqs', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(faq) });
     const data = await response.json();
+    if (response.status === 401) { setError('Sesi admin berakhir. Silakan masukkan PIN kembali.'); setAuth(false); return false; }
     if (!response.ok) { setError(data.error || 'Gagal menyimpan FAQ'); return false; }
     setFaqs((current) => method === 'POST' ? [...current, data.faq] : current.map((item) => item.id === faq.id ? data.faq : item));
     return true;
