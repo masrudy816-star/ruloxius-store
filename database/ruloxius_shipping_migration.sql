@@ -5,7 +5,10 @@ alter table if exists public.ruloxius_orders
   add column if not exists courier text,
   add column if not exists service text,
   add column if not exists etd text,
-  add column if not exists total_weight integer not null default 0;
+  add column if not exists total_weight integer not null default 0,
+  add column if not exists tracking_number text,
+  add column if not exists shipped_at timestamptz,
+  add column if not exists completed_at timestamptz;
 
 alter table if exists public.ruloxius_orders
   drop constraint if exists ruloxius_orders_shipping_cost_nonnegative,
@@ -13,3 +16,7 @@ alter table if exists public.ruloxius_orders
 
 create index if not exists ruloxius_orders_city_id_idx
   on public.ruloxius_orders (city_id);
+
+create index if not exists ruloxius_orders_tracking_number_idx
+  on public.ruloxius_orders (tracking_number)
+  where tracking_number is not null;

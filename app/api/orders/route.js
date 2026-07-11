@@ -1,11 +1,51 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createHash } from "node:crypto";
+import { PRODUCT_WEIGHTS } from "../../catalog";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const TABLE = "ruloxius_orders";
+const PRODUCTS_TABLE = "ruloxius_products";
+
+async function getVerifiedItems(items) {
+  const quantities = new Map();
+  for (const item of items) {
+    const id = String(item.id || "");
+    const quantity = Number(item.quantity);
+    if (!id || !Number.isInteger(quantity) || quantity <= 0 || quantity > 99) {
+      throw new Error("Item pesanan tidak valid.");
+    }
+    quantities.set(id, (quantities.get(id) || 0) + quantity);
+  }
+
+  if (!SUPABASE_URL || !SERVICE_KEY) {
+    return items.map((item) => ({ ...item, price: Number(item.price), weight: PRODUCT_WEIGHTS[item.id] || Number(item.weight || 0) }));
+  }
+
+  const ids = [...quantities.keys()];
+  const filter = encodeURIComponent(`(${ids.join(",")})`);
+  const response = await fetch(
+    `${SUPABASE_URL}/rest/v1/${PRODUCTS_TABLE}?select=id,name,size,price,active&id=in.${filter}`,
+    { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` }, cache: "no-store" }
+  );
+  if (!response.ok) throw new Error("Gagal memvalidasi produk.");
+
+  const products = await response.json();
+  if (products.length !== ids.length || products.some((product) => product.active === false)) {
+    throw new Error("Produk tidak tersedia.");
+  }
+
+  return products.map((product) => ({
+    id: product.id,
+    name: product.name,
+    size: product.size,
+    price: Number(product.price),
+    weight: PRODUCT_WEIGHTS[product.id] || 0,
+    quantity: quantities.get(product.id),
+  }));
+}
 
 const isAdmin = async () => {
   const pin =
@@ -49,15 +89,18 @@ export async function POST(request) {
       );
     }
 
-    const subtotal = Number(body.subtotal);
+    const verifiedItems = await getVerifiedItems(body.items);
+    const subtotal = verifiedItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const totalWeight = verifiedItems.reduce((sum, item) => sum + item.weight * item.quantity, 0);
     const shippingCost = Number(body.shipping_cost);
     const total = Number(body.total);
 
     if (
-      !Number.isFinite(subtotal) || subtotal < 0 ||
+      !Number.isFinite(subtotal) || subtotal < 0 || Number(body.subtotal) !== subtotal ||
       !Number.isFinite(shippingCost) || shippingCost < 0 ||
       !Number.isFinite(total) || total !== subtotal + shippingCost ||
-      !body.courier || !body.service || !body.etd || !body.city
+      !body.courier || !body.service || !body.etd || !body.city ||
+      Number(body.total_weight) !== totalWeight
     ) {
       return NextResponse.json({ error: "Data ongkir pesanan tidak valid." }, { status: 400 });
     }
@@ -93,7 +136,7 @@ export async function POST(request) {
       notes: body.notes || null,
 
 
-      items: body.items,
+      items: verifiedItems,
 
 
       subtotal,
@@ -106,7 +149,7 @@ export async function POST(request) {
 
       etd: String(body.etd),
 
-      total_weight: Number(body.total_weight || 0),
+      total_weight: totalWeight,
 
       total,
 
@@ -383,10 +426,10 @@ export async function PATCH(request) {
 
 
 
-  if (
-    !body.id ||
-    !allowed.includes(body.status)
-  ) {
+  const hasStatus = allowed.includes(body.status);
+  const hasTracking = typeof body.tracking_number === "string";
+
+  if (!body.id || (!hasStatus && !hasTracking)) {
 
     return NextResponse.json(
 
@@ -427,13 +470,12 @@ export async function PATCH(request) {
 
       },
 
-      body:
-        JSON.stringify({
-
-          status:
-            body.status
-
-        })
+      body: JSON.stringify({
+        ...(hasStatus ? { status: body.status } : {}),
+        ...(hasTracking ? { tracking_number: body.tracking_number.trim() || null } : {}),
+        ...(body.status === "shipped" ? { shipped_at: new Date().toISOString() } : {}),
+        ...(body.status === "completed" ? { completed_at: new Date().toISOString() } : {})
+      })
 
     }
 
