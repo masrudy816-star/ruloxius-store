@@ -53,7 +53,7 @@ export default function Storefront() {
         <p>Formula kuat untuk membantu membersihkan kerak kamar mandi, WC, dan permukaan keramik hingga bersih mengkilap.</p>
         <div className="hero-actions hero-actions-desktop"><a className="btn btn-wa" href="#produk">◉ PESAN SEKARANG</a><a className="btn btn-outline" href={SHOPEE_URL} target="_blank" rel="noopener noreferrer">🛍 BELI DI SHOPEE</a></div>
       </div>
-      <div className="hero-media"><Image src="/images/product-hero.png" alt="RULOXIUS 500ML dan 1000ML" fill priority sizes="(max-width: 760px) 100vw, 58vw" /></div>
+      <div className="hero-media"><Image className="hero-image-desktop" src="/images/product-hero.png" alt="RULOXIUS 500ML dan 1000ML" fill priority sizes="58vw" /><Image className="hero-image-mobile" src="/images/product-hero-mobile.png" alt="RULOXIUS 500ML dan 1000ML" fill priority sizes="100vw" /></div>
       <div className="hero-price"><small>Harga mulai</small><strong>Rp28.000</strong></div>
       <div className="hero-actions hero-actions-mobile"><a className="btn btn-wa" href="#produk"><span>◉</span><b>PESAN SEKARANG</b><small>Chat Admin via WhatsApp</small></a><a className="btn btn-outline" href={SHOPEE_URL} target="_blank" rel="noopener noreferrer">🛍 <b>BELI DI SHOPEE</b></a></div>
       <div className="benefit-strip">{benefits.map(([icon, title, description]) => <div key={title}><i>{icon}</i><span><b>{title}</b><small>{description}</small></span></div>)}</div>
