@@ -16,7 +16,7 @@ const valid = (body) => body.question?.trim().length >= 5 && body.answer?.trim()
 
 export async function GET(request) {
   if (!URL || !KEY) return NextResponse.json({ faqs: fallback, mode: 'demo' });
-  const showAll = new URL(request.url).searchParams.get('admin') === '1' && await admin();
+  const showAll = new globalThis.URL(request.url).searchParams.get('admin') === '1' && await admin();
   const response = await fetch(`${URL}/rest/v1/${TABLE}?select=*&${showAll ? '' : 'active=eq.true&'}order=position.asc`, { headers, cache: 'no-store' });
   if (!response.ok) return NextResponse.json({ faqs: fallback, mode: 'fallback' });
   return NextResponse.json({ faqs: await response.json(), mode: 'supabase' });
@@ -37,7 +37,7 @@ export async function PUT(request) {
 }
 export async function DELETE(request) {
   if (!await admin()) return NextResponse.json({ error: 'Tidak diizinkan' }, { status: 401 });
-  const id = new URL(request.url).searchParams.get('id'); if (!id) return NextResponse.json({ error: 'FAQ tidak ditemukan' }, { status: 400 });
+  const id = new globalThis.URL(request.url).searchParams.get('id'); if (!id) return NextResponse.json({ error: 'FAQ tidak ditemukan' }, { status: 400 });
   const response = await fetch(`${URL}/rest/v1/${TABLE}?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE', headers });
   return response.ok ? NextResponse.json({ ok: true }) : NextResponse.json({ error: 'Gagal menghapus FAQ' }, { status: 500 });
 }

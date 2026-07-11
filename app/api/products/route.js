@@ -77,7 +77,7 @@ export async function GET(request) {
   }
 
 
-  const showAll = new URL(request.url).searchParams.get("admin") === "1" && await isAdmin();
+  const showAll = new globalThis.URL(request.url).searchParams.get("admin") === "1" && await isAdmin();
   const response = await fetch(
     `${URL}/rest/v1/${TABLE}?select=*&${showAll ? "" : "active=eq.true&"}order=price.asc`,
     {
@@ -238,7 +238,7 @@ export async function POST(request) {
 
 export async function DELETE(request) {
   if (!(await isAdmin())) return NextResponse.json({ error: "Tidak diizinkan" }, { status: 401 });
-  const id = new URL(request.url).searchParams.get("id");
+  const id = new globalThis.URL(request.url).searchParams.get("id");
   if (!id) return NextResponse.json({ error: "Produk tidak ditemukan" }, { status: 400 });
   if (!URL || !KEY) return NextResponse.json({ ok: true, mode: "demo" });
   const response = await fetch(`${URL}/rest/v1/${TABLE}?id=eq.${encodeURIComponent(id)}`, {
