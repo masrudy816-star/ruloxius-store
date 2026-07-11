@@ -5,6 +5,7 @@ export const metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'),
   title: { default:'RULOXIUS Home Care — Pembersih Kerak Membandel', template:'%s | RULOXIUS' },
   description: 'Pembersih kerak kamar mandi, WC, dan keramik. Pesan RULOXIUS dengan mudah dan aman.',
+  icons: { icon: '/icon.svg', shortcut: '/icon.svg' },
   openGraph:{title:'RULOXIUS Home Care',description:'Kerak tuntas, kamar mandi kilap.',type:'website',locale:'id_ID',images:['/images/product-hero.png']},
   twitter:{card:'summary_large_image',title:'RULOXIUS Home Care',description:'Kerak tuntas, kamar mandi kilap.',images:['/images/product-hero.png']},
 };
