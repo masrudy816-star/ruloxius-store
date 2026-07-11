@@ -9,6 +9,16 @@ const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const TABLE = "ruloxius_orders";
 const PRODUCTS_TABLE = "ruloxius_products";
 
+async function stockRpc(name, body) {
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`, {
+    method: "POST",
+    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(await response.text());
+}
+
 async function getVerifiedItems(items) {
   const quantities = new Map();
   for (const item of items) {
@@ -27,7 +37,7 @@ async function getVerifiedItems(items) {
   const ids = [...quantities.keys()];
   const filter = encodeURIComponent(`(${ids.join(",")})`);
   const response = await fetch(
-    `${SUPABASE_URL}/rest/v1/${PRODUCTS_TABLE}?select=id,name,size,price,weight,active&id=in.${filter}`,
+    `${SUPABASE_URL}/rest/v1/${PRODUCTS_TABLE}?select=id,name,size,price,weight,stock,active&id=in.${filter}`,
     { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` }, cache: "no-store" }
   );
   if (!response.ok) throw new Error("Gagal memvalidasi produk.");
@@ -35,6 +45,9 @@ async function getVerifiedItems(items) {
   const products = await response.json();
   if (products.length !== ids.length || products.some((product) => product.active === false)) {
     throw new Error("Produk tidak tersedia.");
+  }
+  if (products.some((product) => Number(product.stock) < quantities.get(product.id))) {
+    throw new Error("Stok produk tidak mencukupi.");
   }
 
   return products.map((product) => ({
@@ -191,6 +204,7 @@ export async function POST(request) {
 
 
 
+    await stockRpc("ruloxius_reserve_stock", { p_items: verifiedItems });
     const response = await fetch(
 
       `${SUPABASE_URL}/rest/v1/${TABLE}`,
@@ -231,6 +245,7 @@ export async function POST(request) {
       const error =
         await response.text();
 
+      await stockRpc("ruloxius_restore_items_stock", { p_items: verifiedItems });
       throw new Error(error);
 
     }
@@ -447,6 +462,15 @@ export async function PATCH(request) {
   }
 
 
+
+  if (body.status === "cancelled") {
+    try {
+      await stockRpc("ruloxius_cancel_order", { p_order_id: body.id });
+      return NextResponse.json({ ok: true, mode: "supabase" });
+    } catch {
+      return NextResponse.json({ error: "Gagal membatalkan order dan mengembalikan stok" }, { status: 500 });
+    }
+  }
 
   const response = await fetch(
 

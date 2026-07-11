@@ -20,6 +20,7 @@ export default function AdminClient() {
   const [tab, setTab] = useState('orders');
   const [orders, setOrders] = useState([]);
   const [products, setProducts] = useState(PRODUCTS);
+  const [faqs, setFaqs] = useState([]);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -30,18 +31,20 @@ export default function AdminClient() {
     setLoading(true);
     setError('');
     try {
-      const [orderResponse, productResponse] = await Promise.all([
+      const [orderResponse, productResponse, faqResponse] = await Promise.all([
         fetch('/api/orders', { cache: 'no-store' }),
-        fetch('/api/products', { cache: 'no-store' }),
+        fetch('/api/products?admin=1', { cache: 'no-store' }),
+        fetch('/api/faqs?admin=1', { cache: 'no-store' }),
       ]);
       if (orderResponse.status === 401) {
         setAuth(false);
         return;
       }
-      const [orderData, productData] = await Promise.all([orderResponse.json(), productResponse.json()]);
+      const [orderData, productData, faqData] = await Promise.all([orderResponse.json(), productResponse.json(), faqResponse.json()]);
       if (!orderResponse.ok) throw new Error(orderData.error || 'Gagal memuat order');
       setOrders(orderData.orders || []);
       setProducts(productData.products || PRODUCTS);
+      setFaqs(faqData.faqs || []);
       setAuth(true);
     } catch (loadError) {
       setError(loadError.message || 'Gagal memuat data.');
@@ -114,6 +117,29 @@ export default function AdminClient() {
     return true;
   }
 
+  async function deleteProduct(product) {
+    if (!confirm(`Hapus ${product.name} ${product.size}? Produk yang pernah dipesan mungkin tidak dapat dihapus; nonaktifkan sebagai pilihan aman.`)) return false;
+    const response = await fetch(`/api/products?id=${encodeURIComponent(product.id)}`, { method: 'DELETE' });
+    const data = await response.json();
+    if (!response.ok) { setError(data.error || 'Gagal menghapus produk'); return false; }
+    setProducts((current) => current.filter((item) => item.id !== product.id));
+    return true;
+  }
+
+  async function saveFaq(faq, method = 'PUT') {
+    const response = await fetch('/api/faqs', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(faq) });
+    const data = await response.json();
+    if (!response.ok) { setError(data.error || 'Gagal menyimpan FAQ'); return false; }
+    setFaqs((current) => method === 'POST' ? [...current, data.faq] : current.map((item) => item.id === faq.id ? data.faq : item));
+    return true;
+  }
+
+  async function deleteFaq(id) {
+    if (!confirm('Hapus FAQ ini?')) return;
+    const response = await fetch(`/api/faqs?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (response.ok) setFaqs((current) => current.filter((item) => item.id !== id));
+  }
+
   if (auth === null) return <div className="app-page"><div className="empty">Memeriksa sesi admin…</div></div>;
   if (!auth) return <Login error={error} onLogin={load} />;
 
@@ -122,17 +148,19 @@ export default function AdminClient() {
     <div className="admin-shell">
       <div className="admin-title">
         <small>CONTROL PANEL PEMILIK</small>
-        <h1>{tab === 'orders' ? 'Kelola pesanan' : 'Kelola produk'}</h1>
-        <p>{tab === 'orders' ? 'Pantau order, pengiriman, dan komunikasi pelanggan.' : 'Ubah foto, harga, stok, dan informasi produk tanpa coding.'}</p>
+        <h1>{tab === 'orders' ? 'Kelola pesanan' : tab === 'products' ? 'Kelola produk' : 'Kelola FAQ'}</h1>
+        <p>{tab === 'orders' ? 'Pantau order, pengiriman, dan komunikasi pelanggan.' : tab === 'products' ? 'Atur foto, harga, stok, status, dan informasi produk.' : 'Atur pertanyaan dan jawaban yang tampil di halaman utama.'}</p>
       </div>
       <nav className="admin-tabs">
         <button className={tab === 'orders' ? 'active' : ''} onClick={() => setTab('orders')}>Pesanan <b>{metrics.newOrders}</b></button>
         <button className={tab === 'products' ? 'active' : ''} onClick={() => setTab('products')}>Produk</button>
+        <button className={tab === 'faqs' ? 'active' : ''} onClick={() => setTab('faqs')}>FAQ</button>
       </nav>
       {error ? <p className="notice">{error}</p> : null}
       {tab === 'orders'
         ? <OrdersPanel loading={loading} metrics={metrics} shown={shown} query={query} setQuery={setQuery} filter={filter} setFilter={setFilter} updateOrder={updateOrder} onDetail={setSelectedOrder} />
-        : <ProductsPanel products={products} onSave={saveProduct} onCreate={createProduct} />}
+        : tab === 'products' ? <ProductsPanel products={products} orders={orders} onSave={saveProduct} onCreate={createProduct} onDelete={deleteProduct} />
+          : <FaqPanel faqs={faqs} onSave={saveFaq} onDelete={deleteFaq} />}
     </div>
     {selectedOrder ? <OrderDetail order={selectedOrder} onClose={() => setSelectedOrder(null)} onUpdate={updateOrder} /> : null}
   </div>;
@@ -246,20 +274,21 @@ function DetailSection({ title, children }) { return <section className="detail-
 function DetailRow({ label, value }) { return <div className="detail-row"><span>{label}</span><b>{value}</b></div>; }
 function WaButton({ phone, text, children }) { return <a href={`https://wa.me/${phone || WA}?text=${encodeURIComponent(text)}`} target="_blank" rel="noopener noreferrer">{children} ↗</a>; }
 
-function ProductsPanel({ products, onSave, onCreate }) {
+function ProductsPanel({ products, orders, onSave, onCreate, onDelete }) {
   const [adding, setAdding] = useState(false);
+  const sold = useMemo(() => { const result = {}; orders.filter((order) => order.status !== 'cancelled').forEach((order) => (order.items || []).forEach((item) => { result[item.id] = (result[item.id] || 0) + item.quantity; })); return result; }, [orders]);
   return <div className="admin-products-wrap">
-    <div className="admin-products-head"><p>{products.length} produk aktif</p><button className="btn btn-primary" onClick={() => setAdding(true)}>+ TAMBAH PRODUK</button></div>
+    <div className="admin-products-head"><p>{products.filter((p) => p.active).length} aktif • {products.filter((p) => p.stock <= 5).length} stok menipis</p><button className="btn btn-primary" onClick={() => setAdding(true)}>+ TAMBAH PRODUK</button></div>
     {adding ? <ProductEditor product={EMPTY_PRODUCT} onSave={async (product) => {
       const created = await onCreate(product);
       if (created) setAdding(false);
       return created;
     }} isNew onCancel={() => setAdding(false)} /> : null}
-    <div className="admin-products">{products.map((product) => <ProductEditor key={product.id} product={product} onSave={onSave} />)}</div>
+    <div className="admin-products">{products.map((product) => <ProductEditor key={product.id} product={product} sold={sold[product.id] || 0} onSave={onSave} onDelete={onDelete} />)}</div>
   </div>;
 }
 
-function ProductEditor({ product, onSave, isNew = false, onCancel }) {
+function ProductEditor({ product, onSave, onDelete, sold = 0, isNew = false, onCancel }) {
   const [form, setForm] = useState(product);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -286,9 +315,19 @@ function ProductEditor({ product, onSave, isNew = false, onCancel }) {
       <Field label="Berat pengiriman (gram)"><input type="number" min="1" value={form.weight ?? 1000} onChange={(event) => set('weight', Number(event.target.value))} required /></Field>
       <Field label="Isi paket" full><input value={form.detail} onChange={(event) => set('detail', event.target.value)} /></Field>
       <Field label="Keterangan harga" full><input value={form.unit} onChange={(event) => set('unit', event.target.value)} /></Field>
-    </div><label className="admin-check"><input type="checkbox" checked={Boolean(form.popular)} onChange={(event) => set('popular', event.target.checked)} /> Tandai sebagai paling laris</label>
-      <div className="product-editor-actions">{isNew ? <button type="button" className="btn btn-outline" onClick={onCancel}>BATAL</button> : null}<button disabled={busy} className="btn btn-primary">{busy ? 'MENYIMPAN…' : saved ? 'TERSIMPAN ✓' : isNew ? 'TAMBAHKAN PRODUK' : 'SIMPAN PERUBAHAN'}</button></div></div>
+    </div><div className="product-admin-meta"><b>{form.stock <= 0 ? 'Stok habis' : form.stock <= 5 ? `⚠ Stok menipis: ${form.stock}` : `Stok aman: ${form.stock}`}</b><span>Terjual {sold}</span></div><label className="admin-check"><input type="checkbox" checked={Boolean(form.popular)} onChange={(event) => set('popular', event.target.checked)} /> Tandai sebagai paling laris</label><label className="admin-check"><input type="checkbox" checked={form.active !== false} onChange={(event) => set('active', event.target.checked)} /> Tampilkan produk di toko</label>
+      <div className="product-editor-actions">{!isNew ? <button type="button" className="btn danger-button" onClick={() => onDelete(form)}>HAPUS</button> : <button type="button" className="btn btn-outline" onClick={onCancel}>BATAL</button>}<button disabled={busy} className="btn btn-primary">{busy ? 'MENYIMPAN…' : saved ? 'TERSIMPAN ✓' : isNew ? 'TAMBAHKAN PRODUK' : 'SIMPAN PERUBAHAN'}</button></div></div>
   </form>;
+}
+
+function FaqPanel({ faqs, onSave, onDelete }) {
+  const [adding, setAdding] = useState(false);
+  return <div className="faq-admin"><div className="admin-products-head"><p>{faqs.filter((faq) => faq.active).length} FAQ aktif</p><button className="btn btn-primary" onClick={() => setAdding(true)}>+ TAMBAH FAQ</button></div>{adding ? <FaqEditor faq={{ question: '', answer: '', position: faqs.length + 1, active: true }} onSave={async (faq) => { const ok = await onSave(faq, 'POST'); if (ok) setAdding(false); return ok; }} onCancel={() => setAdding(false)} /> : null}{faqs.map((faq) => <FaqEditor key={faq.id} faq={faq} onSave={onSave} onDelete={onDelete} />)}</div>;
+}
+function FaqEditor({ faq, onSave, onDelete, onCancel }) {
+  const [form, setForm] = useState(faq); const [busy, setBusy] = useState(false);
+  async function submit(event) { event.preventDefault(); setBusy(true); await onSave(form); setBusy(false); }
+  return <form className="panel faq-editor" onSubmit={submit}><Field label="Pertanyaan" full><input value={form.question} onChange={(e) => setForm({ ...form, question: e.target.value })} required /></Field><Field label="Jawaban" full><textarea rows="4" value={form.answer} onChange={(e) => setForm({ ...form, answer: e.target.value })} required /></Field><div className="faq-editor-options"><Field label="Urutan"><input type="number" min="0" value={form.position} onChange={(e) => setForm({ ...form, position: Number(e.target.value) })} /></Field><label className="admin-check"><input type="checkbox" checked={form.active !== false} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> Tampilkan FAQ</label></div><div className="product-editor-actions">{onCancel ? <button type="button" className="btn btn-outline" onClick={onCancel}>BATAL</button> : <button type="button" className="btn danger-button" onClick={() => onDelete(form.id)}>HAPUS</button>}<button className="btn btn-primary" disabled={busy}>{busy ? 'MENYIMPAN…' : 'SIMPAN FAQ'}</button></div></form>;
 }
 
 function Field({ label, full, children }) { return <label className={`field ${full ? 'full' : ''}`}><span>{label}</span>{children}</label>; }

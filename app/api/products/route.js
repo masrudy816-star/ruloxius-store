@@ -66,7 +66,7 @@ const mapProduct = (p) => ({
 });
 
 
-export async function GET() {
+export async function GET(request) {
 
   // fallback demo jika supabase belum aktif
   if (!URL || !KEY) {
@@ -77,8 +77,9 @@ export async function GET() {
   }
 
 
+  const showAll = new URL(request.url).searchParams.get("admin") === "1" && await isAdmin();
   const response = await fetch(
-    `${URL}/rest/v1/${TABLE}?select=*&active=eq.true&order=price.asc`,
+    `${URL}/rest/v1/${TABLE}?select=*&${showAll ? "" : "active=eq.true&"}order=price.asc`,
     {
       headers: {
         apikey: KEY,
@@ -233,4 +234,17 @@ export async function POST(request) {
 
   const result = await response.json();
   return NextResponse.json({ product: mapProduct(result[0]), mode: "supabase" }, { status: 201 });
+}
+
+export async function DELETE(request) {
+  if (!(await isAdmin())) return NextResponse.json({ error: "Tidak diizinkan" }, { status: 401 });
+  const id = new URL(request.url).searchParams.get("id");
+  if (!id) return NextResponse.json({ error: "Produk tidak ditemukan" }, { status: 400 });
+  if (!URL || !KEY) return NextResponse.json({ ok: true, mode: "demo" });
+  const response = await fetch(`${URL}/rest/v1/${TABLE}?id=eq.${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: { apikey: KEY, Authorization: `Bearer ${KEY}` },
+  });
+  if (!response.ok) return NextResponse.json({ error: "Produk masih dipakai atau gagal dihapus. Nonaktifkan produk sebagai pilihan aman." }, { status: 409 });
+  return NextResponse.json({ ok: true, mode: "supabase" });
 }
