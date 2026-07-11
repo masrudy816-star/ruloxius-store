@@ -1,35 +1,29 @@
 import { NextResponse } from "next/server";
 
+const API_KEY = process.env.RAJAONGKIR_API_KEY;
 
-const RAJAONGKIR_URL =
-  "https://api.rajaongkir.com/starter/cost";
+const KOMERCE_URL =
+  "https://rajaongkir.komerce.id/api/v1/calculate/domestic-cost";
 
 
 export async function POST(request) {
-
   try {
 
     const body = await request.json();
 
-
     const {
       origin,
       destination,
-      weight,
-      courier
+      weight = 1000,
+      courier = "jne"
     } = body;
 
 
-    if (
-      !origin ||
-      !destination ||
-      !weight ||
-      !courier
-    ) {
+    if (!origin || !destination) {
 
       return NextResponse.json(
         {
-          error: "Data ongkir belum lengkap"
+          error:"Origin dan destination wajib diisi"
         },
         {
           status:400
@@ -39,16 +33,11 @@ export async function POST(request) {
     }
 
 
-    const API_KEY =
-      process.env.RAJAONGKIR_API_KEY;
-
-
     if (!API_KEY) {
 
       return NextResponse.json(
         {
-          error:
-          "RAJAONGKIR_API_KEY belum dipasang"
+          error:"RAJAONGKIR_API_KEY belum tersedia"
         },
         {
           status:500
@@ -59,37 +48,39 @@ export async function POST(request) {
 
 
 
-    const response =
-      await fetch(
-        RAJAONGKIR_URL,
-        {
+    const response = await fetch(
+      KOMERCE_URL,
+      {
+        method:"POST",
 
-          method:"POST",
+        headers:{
+          key: API_KEY,
 
-          headers:{
+          "Content-Type":
+          "application/x-www-form-urlencoded",
 
-            key: API_KEY,
+          Accept:
+          "application/json"
+        },
 
-            "Content-Type":
-            "application/x-www-form-urlencoded"
 
-          },
+        body:
+        new URLSearchParams({
 
-          body:
-          new URLSearchParams({
+          origin,
 
-            origin,
+          destination,
 
-            destination,
+          weight:String(weight),
 
-            weight,
+          courier
 
-            courier
+        }),
 
-          })
+        cache:"no-store"
 
-        }
-      );
+      }
+    );
 
 
 
@@ -98,39 +89,59 @@ export async function POST(request) {
 
 
 
-    return NextResponse.json({
+    if (!response.ok) {
 
-      success:true,
+      return NextResponse.json(
+        {
+          error:
+          "Komerce menolak request",
 
-      data:
-      result.rajaongkir?.results || []
+          detail:
+          result
 
-    });
+        },
+        {
+          status:response.status
+        }
+      );
+
+    }
 
 
 
-  } catch(error){
+    return NextResponse.json(
+      {
+        success:true,
+
+        data:
+        result.data || result
+      }
+    );
+
+
+
+  } catch(error) {
 
 
     console.error(
-      "Shipping error:",
+      "Shipping API Error:",
       error
     );
 
 
     return NextResponse.json(
-
       {
         error:
-        "Gagal mengambil ongkir"
-      },
+        "Gagal mengambil ongkir",
 
+        detail:
+        error.message
+      },
       {
         status:500
       }
-
     );
 
-  }
 
+  }
 }
