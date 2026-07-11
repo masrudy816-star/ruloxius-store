@@ -30,6 +30,7 @@ export default function AdminClient() {
   async function load() {
     setLoading(true);
     setError('');
+    let sessionConfirmed = false;
     try {
       const [orderResponse, productResponse, faqResponse] = await Promise.all([
         fetch('/api/orders', { cache: 'no-store' }),
@@ -40,15 +41,17 @@ export default function AdminClient() {
         setAuth(false);
         return;
       }
+      sessionConfirmed = true;
+      setAuth(true);
       const [orderData, productData, faqData] = await Promise.all([orderResponse.json(), productResponse.json(), faqResponse.json()]);
       if (!orderResponse.ok) throw new Error(orderData.error || 'Gagal memuat order');
+      if (!productResponse.ok) throw new Error(productData.error || 'Gagal memuat produk');
       setOrders(orderData.orders || []);
       setProducts(productData.products || PRODUCTS);
       setFaqs(faqData.faqs || []);
-      setAuth(true);
     } catch (loadError) {
       setError(loadError.message || 'Gagal memuat data.');
-      setAuth(false);
+      setAuth(sessionConfirmed ? true : false);
     } finally {
       setLoading(false);
     }
