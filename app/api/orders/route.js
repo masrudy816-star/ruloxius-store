@@ -27,7 +27,7 @@ async function getVerifiedItems(items) {
   const ids = [...quantities.keys()];
   const filter = encodeURIComponent(`(${ids.join(",")})`);
   const response = await fetch(
-    `${SUPABASE_URL}/rest/v1/${PRODUCTS_TABLE}?select=id,name,size,price,active&id=in.${filter}`,
+    `${SUPABASE_URL}/rest/v1/${PRODUCTS_TABLE}?select=id,name,size,price,weight,active&id=in.${filter}`,
     { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` }, cache: "no-store" }
   );
   if (!response.ok) throw new Error("Gagal memvalidasi produk.");
@@ -42,7 +42,7 @@ async function getVerifiedItems(items) {
     name: product.name,
     size: product.size,
     price: Number(product.price),
-    weight: PRODUCT_WEIGHTS[product.id] || 0,
+      weight: Number(product.weight || PRODUCT_WEIGHTS[product.id] || 0),
     quantity: quantities.get(product.id),
   }));
 }

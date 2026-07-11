@@ -13,6 +13,7 @@ const labels = {
   completed: 'Selesai',
   cancelled: 'Dibatalkan',
 };
+const EMPTY_PRODUCT = { name: '', size: '', detail: '', price: 0, compareAt: 0, saving: 0, unit: '', image: '', popular: false, active: true, stock: 0, weight: 1000 };
 
 export default function AdminClient() {
   const [auth, setAuth] = useState(null);
@@ -97,6 +98,22 @@ export default function AdminClient() {
     return true;
   }
 
+  async function createProduct(product) {
+    setError('');
+    const response = await fetch('/api/products', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(product),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      setError(data.error || 'Gagal menambahkan produk');
+      return false;
+    }
+    setProducts((current) => [...current, data.product].sort((a, b) => a.price - b.price));
+    return true;
+  }
+
   if (auth === null) return <div className="app-page"><div className="empty">Memeriksa sesi admin…</div></div>;
   if (!auth) return <Login error={error} onLogin={load} />;
 
@@ -115,7 +132,7 @@ export default function AdminClient() {
       {error ? <p className="notice">{error}</p> : null}
       {tab === 'orders'
         ? <OrdersPanel loading={loading} metrics={metrics} shown={shown} query={query} setQuery={setQuery} filter={filter} setFilter={setFilter} updateOrder={updateOrder} onDetail={setSelectedOrder} />
-        : <ProductsPanel products={products} onSave={saveProduct} />}
+        : <ProductsPanel products={products} onSave={saveProduct} onCreate={createProduct} />}
     </div>
     {selectedOrder ? <OrderDetail order={selectedOrder} onClose={() => setSelectedOrder(null)} onUpdate={updateOrder} /> : null}
   </div>;
@@ -229,9 +246,20 @@ function DetailSection({ title, children }) { return <section className="detail-
 function DetailRow({ label, value }) { return <div className="detail-row"><span>{label}</span><b>{value}</b></div>; }
 function WaButton({ phone, text, children }) { return <a href={`https://wa.me/${phone || WA}?text=${encodeURIComponent(text)}`} target="_blank" rel="noopener noreferrer">{children} ↗</a>; }
 
-function ProductsPanel({ products, onSave }) { return <div className="admin-products">{products.map((product) => <ProductEditor key={product.id} product={product} onSave={onSave} />)}</div>; }
+function ProductsPanel({ products, onSave, onCreate }) {
+  const [adding, setAdding] = useState(false);
+  return <div className="admin-products-wrap">
+    <div className="admin-products-head"><p>{products.length} produk aktif</p><button className="btn btn-primary" onClick={() => setAdding(true)}>+ TAMBAH PRODUK</button></div>
+    {adding ? <ProductEditor product={EMPTY_PRODUCT} onSave={async (product) => {
+      const created = await onCreate(product);
+      if (created) setAdding(false);
+      return created;
+    }} isNew onCancel={() => setAdding(false)} /> : null}
+    <div className="admin-products">{products.map((product) => <ProductEditor key={product.id} product={product} onSave={onSave} />)}</div>
+  </div>;
+}
 
-function ProductEditor({ product, onSave }) {
+function ProductEditor({ product, onSave, isNew = false, onCancel }) {
   const [form, setForm] = useState(product);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -247,17 +275,19 @@ function ProductEditor({ product, onSave }) {
   async function submit(event) {
     event.preventDefault(); setBusy(true); setSaved(await onSave(form)); setBusy(false); setTimeout(() => setSaved(false), 2500);
   }
-  return <form className="panel product-editor" onSubmit={submit}>
-    <div className="editor-photo"><img src={form.image} alt={form.size} /><label>Ganti foto<input type="file" accept="image/jpeg,image/png,image/webp" onChange={photo} /></label></div>
+  return <form className={`panel product-editor ${isNew ? 'new-product-editor' : ''}`} onSubmit={submit}>
+    <div className="editor-photo">{form.image ? <img src={form.image} alt={form.size || 'Foto produk'} /> : <div className="editor-photo-placeholder"><b>＋</b><span>Foto produk</span></div>}<label>{form.image ? 'Ganti foto' : 'Pilih foto'}<input type="file" accept="image/jpeg,image/png,image/webp" onChange={photo} required={isNew && !form.image} /></label></div>
     <div className="editor-fields"><div className="form-grid">
       <Field label="Nama paket"><input value={form.name} onChange={(event) => set('name', event.target.value)} required /></Field>
       <Field label="Ukuran"><input value={form.size} onChange={(event) => set('size', event.target.value)} required /></Field>
       <Field label="Harga jual"><input type="number" value={form.price} onChange={(event) => set('price', Number(event.target.value))} required /></Field>
-      <Field label="Stok"><input type="number" value={form.stock ?? 0} onChange={(event) => set('stock', Number(event.target.value))} /></Field>
+      <Field label="Harga normal"><input type="number" value={form.compareAt ?? 0} onChange={(event) => set('compareAt', Number(event.target.value))} /></Field>
+      <Field label="Stok"><input type="number" min="0" value={form.stock ?? 0} onChange={(event) => set('stock', Number(event.target.value))} required /></Field>
+      <Field label="Berat pengiriman (gram)"><input type="number" min="1" value={form.weight ?? 1000} onChange={(event) => set('weight', Number(event.target.value))} required /></Field>
       <Field label="Isi paket" full><input value={form.detail} onChange={(event) => set('detail', event.target.value)} /></Field>
       <Field label="Keterangan harga" full><input value={form.unit} onChange={(event) => set('unit', event.target.value)} /></Field>
     </div><label className="admin-check"><input type="checkbox" checked={Boolean(form.popular)} onChange={(event) => set('popular', event.target.checked)} /> Tandai sebagai paling laris</label>
-      <button disabled={busy} className="btn btn-primary">{busy ? 'MENYIMPAN…' : saved ? 'TERSIMPAN ✓' : 'SIMPAN PERUBAHAN'}</button></div>
+      <div className="product-editor-actions">{isNew ? <button type="button" className="btn btn-outline" onClick={onCancel}>BATAL</button> : null}<button disabled={busy} className="btn btn-primary">{busy ? 'MENYIMPAN…' : saved ? 'TERSIMPAN ✓' : isNew ? 'TAMBAHKAN PRODUK' : 'SIMPAN PERUBAHAN'}</button></div></div>
   </form>;
 }
 

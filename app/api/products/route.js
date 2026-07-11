@@ -8,6 +8,32 @@ const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const TABLE = "ruloxius_products";
 
+const validImage = (image) => typeof image === "string" && image.length > 0 && image.length <= 1500000;
+
+const validateProduct = (body) => (
+  typeof body.name === "string" && body.name.trim().length >= 2
+  && typeof body.size === "string" && body.size.trim().length > 0
+  && Number.isFinite(Number(body.price)) && Number(body.price) >= 0
+  && Number.isInteger(Number(body.stock)) && Number(body.stock) >= 0
+  && Number.isInteger(Number(body.weight)) && Number(body.weight) > 0
+  && validImage(body.image)
+);
+
+const productRecord = (body) => ({
+  name: body.name.trim(),
+  size: body.size.trim(),
+  description: body.detail?.trim() || "",
+  price: Number(body.price),
+  compare_at: Number(body.compareAt || body.price),
+  saving: Number(body.saving || 0),
+  unit: body.unit?.trim() || "",
+  stock: Number(body.stock),
+  weight: Number(body.weight),
+  image_url: body.image,
+  popular: Boolean(body.popular),
+  active: body.active !== false,
+});
+
 const isAdmin = async () => {
   const pin =
     process.env.ADMIN_PIN ||
@@ -107,28 +133,10 @@ export async function PUT(request) {
   const body = await request.json();
 
 
-  if (
-    !body.id ||
-    !body.name ||
-    !body.size ||
-    Number(body.price) < 0
-  ) {
+  if (!body.id || !validateProduct(body)) {
     return NextResponse.json(
       {
         error: "Data produk tidak valid",
-      },
-      {
-        status: 400,
-      }
-    );
-  }
-
-
-
-  if ((body.image || "").length > 1500000) {
-    return NextResponse.json(
-      {
-        error: "Foto maksimal sekitar 1 MB",
       },
       {
         status: 400,
@@ -147,15 +155,7 @@ export async function PUT(request) {
 
 
 
-  const record = {
-    name: body.name,
-    size: body.size,
-    description: body.detail || "",
-    price: Number(body.price),
-    stock: Number(body.stock || 0),
-    image_url: body.image || "",
-    active: body.active !== false,
-  };
+  const record = productRecord(body);
 
 
 
@@ -196,4 +196,41 @@ export async function PUT(request) {
     mode: "supabase",
   });
 
+}
+
+export async function POST(request) {
+  if (!(await isAdmin())) {
+    return NextResponse.json({ error: "Tidak diizinkan" }, { status: 401 });
+  }
+
+  const body = await request.json();
+  if (!validateProduct(body)) {
+    return NextResponse.json(
+      { error: "Lengkapi nama, ukuran, harga, stok, berat, dan foto produk." },
+      { status: 400 }
+    );
+  }
+
+  const slug = body.size.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "produk";
+  const product = { id: `${slug}-${Date.now()}`, ...body };
+  if (!URL || !KEY) return NextResponse.json({ product, mode: "demo" }, { status: 201 });
+
+  const response = await fetch(`${URL}/rest/v1/${TABLE}`, {
+    method: "POST",
+    headers: {
+      apikey: KEY,
+      Authorization: `Bearer ${KEY}`,
+      "Content-Type": "application/json",
+      Prefer: "return=representation",
+    },
+    body: JSON.stringify({ id: product.id, ...productRecord(body) }),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    return NextResponse.json({ error: "Gagal menambahkan produk", detail }, { status: 500 });
+  }
+
+  const result = await response.json();
+  return NextResponse.json({ product: mapProduct(result[0]), mode: "supabase" }, { status: 201 });
 }
