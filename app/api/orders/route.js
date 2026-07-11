@@ -49,6 +49,19 @@ export async function POST(request) {
       );
     }
 
+    const subtotal = Number(body.subtotal);
+    const shippingCost = Number(body.shipping_cost);
+    const total = Number(body.total);
+
+    if (
+      !Number.isFinite(subtotal) || subtotal < 0 ||
+      !Number.isFinite(shippingCost) || shippingCost < 0 ||
+      !Number.isFinite(total) || total !== subtotal + shippingCost ||
+      !body.courier || !body.service || !body.etd || !body.city
+    ) {
+      return NextResponse.json({ error: "Data ongkir pesanan tidak valid." }, { status: 400 });
+    }
+
 
 
     const order_number =
@@ -71,6 +84,10 @@ export async function POST(request) {
 
       city: body.city || null,
 
+      province: body.province || null,
+
+      city_id: body.city_id ? String(body.city_id) : null,
+
       postal_code: body.postal_code || null,
 
       notes: body.notes || null,
@@ -79,9 +96,19 @@ export async function POST(request) {
       items: body.items,
 
 
-      subtotal: Number(body.subtotal || body.total || 0),
+      subtotal,
 
-      total: Number(body.total || 0),
+      shipping_cost: shippingCost,
+
+      courier: String(body.courier),
+
+      service: String(body.service),
+
+      etd: String(body.etd),
+
+      total_weight: Number(body.total_weight || 0),
+
+      total,
 
 
       payment_method:

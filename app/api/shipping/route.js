@@ -5,6 +5,38 @@ const API_KEY = process.env.RAJAONGKIR_API_KEY;
 const KOMERCE_URL =
   "https://rajaongkir.komerce.id/api/v1/calculate/domestic-cost";
 
+const COURIER_NAMES = {
+  jne: "JNE",
+  jnt: "J&T",
+  tiki: "TIKI",
+  sicepat: "SiCepat"
+};
+
+function normalizeOptions(payload) {
+  const rows = Array.isArray(payload) ? payload : [];
+
+  return rows.flatMap((row) => {
+    const code = String(row.code || row.courier_code || row.name || row.courier || "").toLowerCase();
+    const name = COURIER_NAMES[code] || row.courier_name || row.name || row.code || "Kurir";
+    const services = Array.isArray(row.costs) ? row.costs : [row];
+
+    return services.flatMap((service) => {
+      const costDetail = Array.isArray(service.cost) ? service.cost[0] : service.cost;
+      const cost = Number(costDetail?.value ?? costDetail ?? service.price ?? service.shipping_cost ?? 0);
+      if (!cost) return [];
+
+      return [{
+        courier: code || String(name).toLowerCase(),
+        name,
+        service: service.service || service.type || service.service_code || "REG",
+        description: service.description || service.service_name || "Layanan pengiriman",
+        cost,
+        etd: String(costDetail?.etd || service.etd || service.estimated_delivery || "-")
+      }];
+    });
+  });
+}
+
 
 export async function POST(request) {
   try {
@@ -14,12 +46,12 @@ export async function POST(request) {
     const {
       origin,
       destination,
-      weight = 1000,
-      courier = "jne"
+      weight,
+      courier = "jne:jnt:tiki:sicepat"
     } = body;
 
 
-    if (!origin || !destination) {
+    if (!/^\d+$/.test(String(origin || "")) || !/^\d+$/.test(String(destination || ""))) {
 
       return NextResponse.json(
         {
@@ -30,6 +62,21 @@ export async function POST(request) {
         }
       );
 
+    }
+
+    const safeWeight = Number(weight);
+    if (!Number.isInteger(safeWeight) || safeWeight <= 0 || safeWeight > 30000) {
+      return NextResponse.json({ error:"Berat pengiriman tidak valid" }, { status:400 });
+    }
+
+    const allowedCouriers = new Set(["jne", "jnt", "tiki", "sicepat"]);
+    const safeCouriers = String(courier)
+      .split(":")
+      .filter((item) => allowedCouriers.has(item))
+      .join(":");
+
+    if (!safeCouriers) {
+      return NextResponse.json({ error:"Kurir tidak valid" }, { status:400 });
     }
 
 
@@ -71,9 +118,9 @@ export async function POST(request) {
 
           destination,
 
-          weight:String(weight),
+          weight:String(safeWeight),
 
-          courier
+          courier:safeCouriers
 
         }),
 
@@ -113,8 +160,7 @@ export async function POST(request) {
       {
         success:true,
 
-        data:
-        result.data || result
+        data: normalizeOptions(result.data || result)
       }
     );
 

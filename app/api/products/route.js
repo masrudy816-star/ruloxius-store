@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { PRODUCTS } from "../../catalog";
+import { PRODUCTS, PRODUCT_WEIGHTS } from "../../catalog";
 
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -36,6 +36,7 @@ const mapProduct = (p) => ({
   popular: Boolean(p.popular),
   active: p.active !== false,
   stock: Number(p.stock || 0),
+  weight: Number(p.weight || PRODUCT_WEIGHTS[p.id] || 0),
 });
 
 
